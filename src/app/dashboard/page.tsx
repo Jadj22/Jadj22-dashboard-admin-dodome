@@ -15,11 +15,5 @@ export default async function Dashboard() {
     return redirect('/');
   }
 
-  // Définir le business ID par défaut si non défini
-  if (!session.user.businessId) {
-    // Première connexion - peut être défini via use-business plus tard
-    localStorage.setItem('dodome_business_id', 'initial');
-  }
-
   redirect('/dashboard/overview');
 }
