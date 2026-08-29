@@ -7,40 +7,55 @@ export const { auth, handlers, signOut, signIn } = NextAuth({
   ...authConfig,
   callbacks: {
     async jwt({ token, user, account }) {
-      // Credentials -> déjà accessToken sur user (auth.config)
-      // @ts-expect-error
-      if (user?.accessToken) token.accessToken = user.accessToken;
-      // @ts-expect-error
-      if (user?.refreshToken) token.refreshToken = user.refreshToken;
+      if (user?.accessToken) token.accessToken = user.accessToken as string;
+      if (user?.refreshToken) token.refreshToken = user.refreshToken as string;
 
-      // Google OAuth -> échanger id_token contre JWT DODOME
-      // @ts-expect-error
       if (account?.provider === 'google' && account?.id_token) {
         try {
           const res = await fetch(`${API_BASE}/auth/google/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_token: account.id_token }),
+            body: JSON.stringify({ id_token: account.id_token })
           });
           if (res.ok) {
-            const data = (await res.json()) as { access: string; refresh: string; user: any };
+            const data = (await res.json()) as {
+              access: string;
+              refresh: string;
+              user: any;
+            };
             token.accessToken = data.access;
             token.refreshToken = data.refresh;
-            // @ts-expect-error
             token.user = data.user;
+          }
+        } catch {}
+      }
+
+      if (token.accessToken) {
+        const businessId = token.businessId as string | undefined;
+        // Fetch user role from API
+        try {
+          const res = await fetch(`${API_BASE}/auth/me/`, {
+            headers: { Authorization: `Bearer ${token.accessToken}` }
+          });
+          if (res.ok) {
+            const data = (await res.json()) as {
+              role?: string;
+              permissions?: string[];
+            };
+            token.role = data.role;
+            token.permissions = data.permissions;
           }
         } catch {}
       }
       return token;
     },
     async session({ session, token }) {
-      // @ts-expect-error
-      session.accessToken = token.accessToken;
-      // @ts-expect-error
-      session.refreshToken = token.refreshToken;
-      // @ts-expect-error
+      session.accessToken = token.accessToken as string;
+      session.refreshToken = token.refreshToken as string;
       if (token.user) session.user = { ...session.user, ...token.user };
+      session.user.role = token.role as string;
+      session.user.permissions = token.permissions as string[];
       return session;
-    },
-  },
+    }
+  }
 });

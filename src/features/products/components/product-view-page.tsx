@@ -1,5 +1,5 @@
-import { fakeProducts, Product } from '@/constants/mock-api';
 import { notFound } from 'next/navigation';
+import { fetchWithAuth } from '@/lib/utils';
 import ProductForm from './product-form';
 
 type TProductViewPageProps = {
@@ -13,12 +13,14 @@ export default async function ProductViewPage({
   let pageTitle = 'Create New Product';
 
   if (productId !== 'new') {
-    const data = await fakeProducts.getProductById(Number(productId));
-    product = data.product as Product;
-    if (!product) {
+    const res = await fetchWithAuth(`/api/items/${productId}/`);
+    if (!res.ok) {
       notFound();
+    } else {
+      const data = await res.json();
+      product = data;
+      pageTitle = `Edit Product`;
     }
-    pageTitle = `Edit Product`;
   }
 
   return <ProductForm initialData={product} pageTitle={pageTitle} />;

@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { useRouter } from 'next/navigation';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -23,4 +24,14 @@ export function formatBytes(
       ? (accurateSizes[i] ?? 'Bytest')
       : (sizes[i] ?? 'Bytes')
   }`;
+}
+
+export async function fetchWithAuth(path: string) {
+  const res = await fetch(path, {
+    headers: {
+      Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('dodome_access') : ''}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  return res;
 }

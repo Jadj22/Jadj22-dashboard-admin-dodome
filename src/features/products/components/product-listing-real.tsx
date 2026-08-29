@@ -14,11 +14,13 @@ function toProduct(item: Item): Product {
     name: item.nom,
     description: item.description,
     price: parseFloat(item.prix),
-    photo_url: item.photos[0]?.image ?? `https://api.slingacademy.com/public/sample-products/1.png`,
+    photo_url:
+      item.photos[0]?.image ??
+      `https://api.slingacademy.com/public/sample-products/1.png`,
     category: item.category?.nom ?? 'Sans catégorie',
     created_at: item.created_at,
-    updated_at: item.created_at,
-  } as unknown as Product;
+    updated_at: item.created_at
+  } as Product;
 }
 
 export default function ProductListingReal() {
@@ -35,7 +37,7 @@ export default function ProductListingReal() {
 
   const [data, setData] = useState<{ products: Product[]; total: number }>({
     products: [],
-    total: 0,
+    total: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export default function ProductListingReal() {
         limit: pageLimit,
         search: search ?? undefined,
         // categories du starter = "Electronics.Furniture" -> on prend la 1ère
-        category_id: undefined,
+        category_id: undefined
       })
       .then((res) => {
         const products = res.results.map(toProduct);
@@ -66,12 +68,22 @@ export default function ProductListingReal() {
       .finally(() => setLoading(false));
   }, [businessId, page, pageLimit, search, categories]);
 
-  if (loading) return <div className='p-8 text-sm text-muted-foreground'>Chargement catalogue DODOME...</div>;
-  if (error) return <div className='p-8 text-sm text-destructive'>Erreur API: {error} — fallback mock désactivé. Vérifiez NEXT_PUBLIC_API_URL et le token.</div>;
+  if (loading)
+    return (
+      <div className='text-muted-foreground p-8 text-sm'>
+        Chargement catalogue DODOME...
+      </div>
+    );
+  if (error)
+    return (
+      <div className='text-destructive p-8 text-sm'>
+        Erreur API: {error} — fallback mock désactivé. Vérifiez
+        NEXT_PUBLIC_API_URL et le token.
+      </div>
+    );
 
   return (
     <ProductTable
-      // @ts-expect-error - colonnes Product compatibles
       columns={productColumns}
       data={data.products}
       totalItems={data.total}
