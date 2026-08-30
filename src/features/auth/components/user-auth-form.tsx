@@ -37,16 +37,15 @@ export default function UserAuthForm() {
   const onSubmit = async (data: UserFormValue) => {
     setError(null);
     startTransition(async () => {
-      const res = await signIn('google', {
-        redirect: false,
-        callbackUrl: callbackUrl ?? '/dashboard'
-      });
-      if (res?.error) {
+      try {
+        await signIn('google', {
+          callbackUrl: callbackUrl ?? '/dashboard'
+        });
+        toast.success('Connecté !');
+      } catch (err) {
+        console.error('Erreur Google signin:', err);
         setError("Erreur d'authentification Google");
         toast.error('Échec de connexion');
-      } else if (res?.ok) {
-        toast.success('Connecté !');
-        window.location.href = callbackUrl ?? '/dashboard';
       }
     });
   };
