@@ -1,6 +1,4 @@
-'use client';
-
-import { Metadata } from 'next';
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Terms of Service - DODOME',
@@ -12,7 +10,9 @@ export default function TermsPage() {
     <div className='bg-background min-h-screen p-8'>
       <div className='mx-auto max-w-4xl'>
         <h1 className='mb-6 text-3xl font-bold'>Terms of Service</h1>
+
         <p>Last updated: August 2026</p>
+
         <div className='prose max-w-none'>
           <h2 className='mb-4 text-2xl font-bold'>Acceptance</h2>
           <p>
