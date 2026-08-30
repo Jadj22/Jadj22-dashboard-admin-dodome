@@ -11,23 +11,9 @@ export const { auth, handlers, signOut, signIn } = NextAuth({
       if (user?.refreshToken) token.refreshToken = user.refreshToken as string;
 
       if (account?.provider === 'google' && account?.id_token) {
-        try {
-          const res = await fetch(`${API_BASE}/auth/google/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_token: account.id_token })
-          });
-          if (res.ok) {
-            const data = (await res.json()) as {
-              access: string;
-              refresh: string;
-              user: any;
-            };
-            token.accessToken = data.access;
-            token.refreshToken = data.refresh;
-            token.user = data.user;
-          }
-        } catch {}
+        token.accessToken = account.accessToken as string;
+        token.refreshToken = account.refreshToken as string;
+        token.user = account.user;
       }
 
       if (token.accessToken) {
