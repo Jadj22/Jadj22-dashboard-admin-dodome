@@ -59,22 +59,40 @@ async function dodomeFetch<T>(path: string, opts: FetchOpts = {}): Promise<T> {
   }
   if (opts.businessId) headers['X-Business-ID'] = opts.businessId;
 
-  let res = await fetch(url, {
-    method: opts.method ?? 'GET',
-    headers,
-    body: opts.body ? JSON.stringify(opts.body) : undefined
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: opts.method ?? 'GET',
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+  } catch (err: any) {
+    console.warn(
+      `[DODOME API] Connexion impossible vers ${url}:`,
+      err.message || err
+    );
+    throw new Error(
+      `Impossible de joindre le serveur API (${url}). Vérifiez que le backend est démarré.`
+    );
+  }
 
   // Refresh auto sur 401
   if (res.status === 401 && opts.auth !== false) {
-    const newToken = await refreshAccess();
-    if (newToken) {
-      headers['Authorization'] = `Bearer ${newToken}`;
-      res = await fetch(url, {
-        method: opts.method ?? 'GET',
-        headers,
-        body: opts.body ? JSON.stringify(opts.body) : undefined
-      });
+    try {
+      const newToken = await refreshAccess();
+      if (newToken) {
+        headers['Authorization'] = `Bearer ${newToken}`;
+        res = await fetch(url, {
+          method: opts.method ?? 'GET',
+          headers,
+          body: opts.body ? JSON.stringify(opts.body) : undefined
+        });
+      }
+    } catch (refreshErr) {
+      console.warn(
+        '[DODOME API] Échec du rafraîchissement du token:',
+        refreshErr
+      );
     }
   }
 
