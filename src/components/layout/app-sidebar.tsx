@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import { signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
 import { Icons } from '../icons';
 import { useBusiness } from '@/hooks/use-business';
@@ -50,6 +50,7 @@ import { useBusiness } from '@/hooks/use-business';
 export default function AppSidebar() {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const router = useRouter();
   const { state, isMobile } = useSidebar();
   const { active, role, businesses, setActiveId } = useBusiness();
 
@@ -196,23 +197,28 @@ export default function AppSidebar() {
                 <DropdownMenuSeparator />
 
                 <DropdownMenuGroup>
-                  <DropdownMenuItem>
-                    <BadgeCheck />
-                    Account
+                  <DropdownMenuItem
+                    className='cursor-pointer gap-2'
+                    onClick={() => router.push('/dashboard/profile')}
+                  >
+                    <BadgeCheck className='size-4' />
+                    Mon Compte & Profil
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <CreditCard />
-                    Billing
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <Bell />
-                    Notifications
+                  <DropdownMenuItem
+                    className='cursor-pointer gap-2'
+                    onClick={() => router.push('/dashboard/invoices')}
+                  >
+                    <CreditCard className='size-4' />
+                    Facturation
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => signOut()}>
-                  <LogOut />
-                  Log out
+                <DropdownMenuItem
+                  className='text-destructive focus:text-destructive cursor-pointer gap-2'
+                  onClick={() => signOut({ callbackUrl: '/' })}
+                >
+                  <LogOut className='size-4' />
+                  Déconnexion
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

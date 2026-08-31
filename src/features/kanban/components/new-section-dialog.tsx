@@ -1,4 +1,5 @@
 'use client';
+
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -10,8 +11,8 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-
 import { useTaskStore } from '../utils/store';
+import { Plus } from 'lucide-react';
 
 export default function NewSectionDialog() {
   const addCol = useTaskStore((state) => state.addCol);
@@ -23,42 +24,48 @@ export default function NewSectionDialog() {
     const formData = new FormData(form);
     const { title } = Object.fromEntries(formData);
 
-    if (typeof title !== 'string') return;
-    addCol(title);
+    if (typeof title !== 'string' || !title.trim()) return;
+    addCol(title.trim());
+    form.reset();
   };
 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant='secondary' size='lg' className='w-full'>
-          ＋ Add New Section
+        <Button
+          variant='outline'
+          size='lg'
+          className='w-full gap-1.5 border-dashed'
+        >
+          <Plus className='h-4 w-4' />
+          Nouvelle colonne
         </Button>
       </DialogTrigger>
       <DialogContent className='sm:max-w-[425px]'>
         <DialogHeader>
-          <DialogTitle>Add New Section</DialogTitle>
+          <DialogTitle>Ajouter une colonne</DialogTitle>
           <DialogDescription>
-            What section you want to add today?
+            Créez une nouvelle colonne d'état pour votre tableau.
           </DialogDescription>
         </DialogHeader>
         <form
-          id='todo-form'
+          id='section-form'
           className='grid gap-4 py-4'
           onSubmit={handleSubmit}
         >
-          <div className='grid grid-cols-4 items-center gap-4'>
+          <div className='space-y-1.5'>
             <Input
               id='title'
               name='title'
-              placeholder='Section title...'
-              className='col-span-4'
+              placeholder='Ex: En attente, Validé...'
+              required
             />
           </div>
         </form>
         <DialogFooter>
           <DialogTrigger asChild>
-            <Button type='submit' size='sm' form='todo-form'>
-              Add Section
+            <Button type='submit' size='sm' form='section-form'>
+              Créer la colonne
             </Button>
           </DialogTrigger>
         </DialogFooter>
