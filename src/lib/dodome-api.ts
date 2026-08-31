@@ -415,7 +415,33 @@ export const catalogApi = {
         dodomeFetch<void>(`/businesses/${businessId}/items/${itemId}/`, {
           method: 'DELETE',
           businessId
-        })
+        }),
+      uploadPhoto: (
+        businessId: string,
+        itemId: string,
+        file: File,
+        caption?: string
+      ) => {
+        const fd = new FormData();
+        fd.append('image', file);
+        if (caption) fd.append('caption', caption);
+        return dodomeFetch<{ id: string; image: string; caption?: string }>(
+          `/businesses/${businessId}/items/${itemId}/photos/`,
+          {
+            method: 'POST',
+            body: fd,
+            businessId
+          }
+        );
+      },
+      deletePhoto: (businessId: string, itemId: string, photoId: string) =>
+        dodomeFetch<void>(
+          `/businesses/${businessId}/items/${itemId}/photos/${photoId}/`,
+          {
+            method: 'DELETE',
+            businessId
+          }
+        )
     }
   ),
 

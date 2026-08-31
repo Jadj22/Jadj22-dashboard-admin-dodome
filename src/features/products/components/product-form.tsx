@@ -24,9 +24,11 @@ import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { useBusiness } from '@/hooks/use-business';
 import { catalogApi, type Category } from '@/lib/dodome-api';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { Plus, Upload, X, Trash2, Package } from 'lucide-react';
+import Image from 'next/image';
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -49,8 +51,14 @@ export default function ProductForm({
 }) {
   const { active } = useBusiness();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
+  const [newFiles, setNewFiles] = useState<File[]>([]);
+  const [newPreviews, setNewPreviews] = useState<string[]>([]);
+  const [existingPhotos, setExistingPhotos] = useState<
+    { id: string; image: string }[]
+  >(initialData?.photos || []);
 
   useEffect(() => {
     if (!active?.id) return;
@@ -73,6 +81,53 @@ export default function ProductForm({
     values: defaultValues
   });
 
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const totalCount = existingPhotos.length + newFiles.length + files.length;
+    if (totalCount > 5) {
+      toast.error('Maximum 5 photos par article.');
+      return;
+    }
+
+    const validFiles: File[] = [];
+    const validPreviews: string[] = [];
+
+    for (const f of files) {
+      if (f.size > 5 * 1024 * 1024) {
+        toast.error(`Le fichier ${f.name} dépasse 5 Mo.`);
+        continue;
+      }
+      validFiles.push(f);
+      validPreviews.push(URL.createObjectURL(f));
+    }
+
+    setNewFiles((prev) => [...prev, ...validFiles]);
+    setNewPreviews((prev) => [...prev, ...validPreviews]);
+  };
+
+  const removeNewFile = (index: number) => {
+    URL.revokeObjectURL(newPreviews[index]);
+    setNewFiles((prev) => prev.filter((_, i) => i !== index));
+    setNewPreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const deleteExistingPhoto = async (photoId: string) => {
+    if (!active?.id || !initialData?.id) return;
+    try {
+      await catalogApi.items.deletePhoto(
+        active.id,
+        String(initialData.id),
+        photoId
+      );
+      setExistingPhotos((prev) => prev.filter((p) => p.id !== photoId));
+      toast.success('Photo supprimée');
+    } catch (e: any) {
+      toast.error(e.message || 'Impossible de supprimer la photo');
+    }
+  };
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!active?.id) {
       toast.error('Aucun business actif sélectionné');
@@ -94,16 +149,26 @@ export default function ProductForm({
         payload.category_id = null;
       }
 
-      if (initialData?.id) {
-        await catalogApi.items.update(
-          active.id,
-          String(initialData.id),
-          payload
-        );
+      let itemId = initialData?.id ? String(initialData.id) : null;
+
+      if (itemId) {
+        await catalogApi.items.update(active.id, itemId, payload);
         toast.success('Article mis à jour !');
       } else {
-        await catalogApi.items.create(active.id, payload);
+        const created = await catalogApi.items.create(active.id, payload);
+        itemId = String(created.id);
         toast.success('Article créé avec succès !');
+      }
+
+      // Téléversement des nouvelles photos
+      if (itemId && newFiles.length > 0) {
+        for (const file of newFiles) {
+          try {
+            await catalogApi.items.uploadPhoto(active.id, itemId, file);
+          } catch (photoErr: any) {
+            console.warn('Erreur téléversement photo:', photoErr);
+          }
+        }
       }
 
       router.push('/dashboard/product');
@@ -127,6 +192,86 @@ export default function ProductForm({
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-8'>
+            {/* Zone Galerie Photos */}
+            <div className='space-y-3'>
+              <FormLabel className='text-sm font-semibold'>
+                Photos de l'article (jusqu'à 5 photos)
+              </FormLabel>
+
+              <input
+                ref={fileInputRef}
+                type='file'
+                accept='image/*'
+                multiple
+                onChange={handleFilesSelected}
+                className='hidden'
+              />
+
+              <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5'>
+                {/* Photos déjà existantes */}
+                {existingPhotos.map((p) => (
+                  <div
+                    key={p.id}
+                    className='group bg-muted/30 relative aspect-square overflow-hidden rounded-xl border'
+                  >
+                    <Image
+                      src={p.image}
+                      alt='Photo existante'
+                      fill
+                      className='object-cover'
+                    />
+                    <Button
+                      type='button'
+                      size='icon'
+                      variant='destructive'
+                      className='absolute top-1.5 right-1.5 h-6 w-6 rounded-full opacity-90 shadow-sm group-hover:opacity-100'
+                      onClick={() => deleteExistingPhoto(p.id)}
+                    >
+                      <Trash2 className='h-3 w-3' />
+                    </Button>
+                  </div>
+                ))}
+
+                {/* Nouvelles photos prêtes à être envoyées */}
+                {newPreviews.map((previewUrl, idx) => (
+                  <div
+                    key={idx}
+                    className='group border-primary/50 bg-muted/30 relative aspect-square overflow-hidden rounded-xl border-2'
+                  >
+                    <Image
+                      src={previewUrl}
+                      alt={`Nouvelle photo ${idx + 1}`}
+                      fill
+                      className='object-cover'
+                    />
+                    <Button
+                      type='button'
+                      size='icon'
+                      variant='destructive'
+                      className='absolute top-1.5 right-1.5 h-6 w-6 rounded-full shadow-sm'
+                      onClick={() => removeNewFile(idx)}
+                    >
+                      <X className='h-3 w-3' />
+                    </Button>
+                  </div>
+                ))}
+
+                {/* Bouton d'ajout de photo */}
+                {existingPhotos.length + newFiles.length < 5 && (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className='border-muted-foreground/30 hover:border-primary hover:bg-muted/30 flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-3 text-center transition-all'
+                  >
+                    <Upload className='text-muted-foreground mb-1 h-6 w-6' />
+                    <span className='text-xs font-medium'>Ajouter photo</span>
+                    <span className='text-muted-foreground text-[10px]'>
+                      {existingPhotos.length + newFiles.length}/5
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
               <FormField
                 control={form.control}
@@ -183,8 +328,8 @@ export default function ProductForm({
                     <FormControl>
                       <Input
                         type='number'
-                        step='1'
-                        placeholder='0'
+                        step='any'
+                        placeholder='Ex: 5000'
                         {...field}
                       />
                     </FormControl>
@@ -197,9 +342,12 @@ export default function ProductForm({
                 name='unite'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Unité de mesure</FormLabel>
+                    <FormLabel>Unité de facturation</FormLabel>
                     <FormControl>
-                      <Input placeholder='Ex: UNITE, JOUR, LOT' {...field} />
+                      <Input
+                        placeholder='Ex: JOUR, HEURE, PIECE, LOT...'
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -211,11 +359,12 @@ export default function ProductForm({
               name='description'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>Description détaillée</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder='Détails, caractéristiques, état...'
+                      placeholder="Décrivez l'article, ses caractéristiques, ses dimensions..."
                       className='resize-none'
+                      rows={4}
                       {...field}
                     />
                   </FormControl>
@@ -223,12 +372,12 @@ export default function ProductForm({
                 </FormItem>
               )}
             />
-            <Button type='submit' disabled={loading}>
-              {loading
-                ? 'Enregistrement...'
-                : initialData?.id
-                  ? 'Mettre à jour'
-                  : 'Ajouter au catalogue'}
+            <Button
+              type='submit'
+              disabled={loading}
+              className='w-full sm:w-auto'
+            >
+              {loading ? 'Enregistrement en cours...' : 'Enregistrer l’article'}
             </Button>
           </form>
         </Form>
