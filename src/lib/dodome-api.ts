@@ -4,8 +4,7 @@
  * Gère JWT (access/refresh), X-Business-ID (RM-01), pagination DRF, refresh auto 401
  */
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api';
 
 // Types paginés DRF
 export type Paginated<T> = {
@@ -39,7 +38,7 @@ async function refreshAccess(): Promise<string | null> {
   const res = await fetch(`${API_BASE}/auth/refresh/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh }),
+    body: JSON.stringify({ refresh })
   });
   if (!res.ok) return null;
   const data = (await res.json()) as { access: string };
@@ -48,14 +47,11 @@ async function refreshAccess(): Promise<string | null> {
   return data.access;
 }
 
-async function dodomeFetch<T>(
-  path: string,
-  opts: FetchOpts = {}
-): Promise<T> {
+async function dodomeFetch<T>(path: string, opts: FetchOpts = {}): Promise<T> {
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...opts.headers,
+    ...opts.headers
   };
   if (opts.auth !== false) {
     const token = getAccessToken();
@@ -66,7 +62,7 @@ async function dodomeFetch<T>(
   let res = await fetch(url, {
     method: opts.method ?? 'GET',
     headers,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
   });
 
   // Refresh auto sur 401
@@ -77,7 +73,7 @@ async function dodomeFetch<T>(
       res = await fetch(url, {
         method: opts.method ?? 'GET',
         headers,
-        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        body: opts.body ? JSON.stringify(opts.body) : undefined
       });
     }
   }
@@ -104,7 +100,7 @@ export const authApi = {
     ),
   register: (data: Record<string, unknown>) =>
     dodomeFetch('/auth/register/', { method: 'POST', body: data, auth: false }),
-  me: () => dodomeFetch('/auth/me/'),
+  me: () => dodomeFetch('/auth/me/')
 };
 
 // ─── Types DODOME ───────────────────────────────────────────────────────
@@ -145,10 +141,19 @@ export type Item = {
 };
 
 // ─── Business ───────────────────────────────────────────────────────────
+export type BusinessContext = {
+  business: Business;
+  membership: { id: string; statut: string };
+  role: { id: string; nom: string; is_system: boolean } | null;
+  permissions: string[];
+};
+
 export const businessApi = {
-  list: () => dodomeFetch<Paginated<Business>>('/businesses/').then((d) => d.results),
-  // le starter attendait aussi /businesses mais la vraie API est paginée
+  list: () =>
+    dodomeFetch<Paginated<Business>>('/businesses/').then((d) => d.results),
   get: (id: string) => dodomeFetch<Business>(`/businesses/${id}/`),
+  current: (businessId: string) =>
+    dodomeFetch<BusinessContext>(`/businesses/current/context/`, { businessId })
 };
 
 // ─── Catalogue ──────────────────────────────────────────────────────────
@@ -160,40 +165,83 @@ export const catalogApi = {
         { businessId }
       ).then((d) => d.results),
     {
-      create: (businessId: string, data: { nom: string; description?: string; parent_id?: string | null }) =>
+      create: (
+        businessId: string,
+        data: { nom: string; description?: string; parent_id?: string | null }
+      ) =>
         dodomeFetch<Category>(`/businesses/${businessId}/categories/`, {
           method: 'POST',
           body: data as unknown as Record<string, unknown>,
-          businessId,
+          businessId
         }),
       remove: (businessId: string, categoryId: string) =>
-        dodomeFetch<void>(`/businesses/${businessId}/categories/${categoryId}/`, {
-          method: 'DELETE',
-          businessId,
-        }),
+        dodomeFetch<void>(
+          `/businesses/${businessId}/categories/${categoryId}/`,
+          {
+            method: 'DELETE',
+            businessId
+          }
+        )
     }
   ),
 
-  items: (
-    businessId: string,
-    opts?: { page?: number; limit?: number; search?: string; category_id?: string }
-  ) => {
-    const p = new URLSearchParams();
-    if (opts?.page) p.set('page', String(opts.page));
-    if (opts?.limit) p.set('page_size', String(opts.limit));
-    if (opts?.search) p.set('search', opts.search);
-    if (opts?.category_id) p.set('category_id', opts.category_id);
-    const qs = p.toString() ? `?${p.toString()}` : '';
-    return dodomeFetch<Paginated<Item>>(
-      `/businesses/${businessId}/items/${qs}`,
-      { businessId }
-    );
-  },
+  items: Object.assign(
+    (
+      businessId: string,
+      opts?: {
+        page?: number;
+        limit?: number;
+        search?: string;
+        category_id?: string;
+      }
+    ) => {
+      const p = new URLSearchParams();
+      if (opts?.page) p.set('page', String(opts.page));
+      if (opts?.limit) p.set('page_size', String(opts.limit));
+      if (opts?.search) p.set('search', opts.search);
+      if (opts?.category_id) p.set('category_id', opts.category_id);
+      const qs = p.toString() ? `?${p.toString()}` : '';
+      return dodomeFetch<Paginated<Item>>(
+        `/businesses/${businessId}/items/${qs}`,
+        { businessId }
+      );
+    },
+    {
+      get: (businessId: string, itemId: string) =>
+        dodomeFetch<Item>(`/businesses/${businessId}/items/${itemId}/`, {
+          businessId
+        }),
+      create: (
+        businessId: string,
+        data: Partial<Item> & Record<string, unknown>
+      ) =>
+        dodomeFetch<Item>(`/businesses/${businessId}/items/`, {
+          method: 'POST',
+          body: data,
+          businessId
+        }),
+      update: (
+        businessId: string,
+        itemId: string,
+        data: Partial<Item> & Record<string, unknown>
+      ) =>
+        dodomeFetch<Item>(`/businesses/${businessId}/items/${itemId}/`, {
+          method: 'PATCH',
+          body: data,
+          businessId
+        }),
+      remove: (businessId: string, itemId: string) =>
+        dodomeFetch<void>(`/businesses/${businessId}/items/${itemId}/`, {
+          method: 'DELETE',
+          businessId
+        })
+    }
+  ),
 
   stock: (businessId: string) =>
     dodomeFetch<Paginated<unknown>>(`/businesses/${businessId}/stock/`, {
-      businessId,
-    }),
+      businessId
+    })
 };
 
 // ─── Stock ──────────────────────────────────────────────────────────────
@@ -225,18 +273,23 @@ export const stockApi = {
     ),
   create: (
     businessId: string,
-    data: { item_id: string; type: StockMovement['type']; quantite: number; motif: string }
+    data: {
+      item_id: string;
+      type: StockMovement['type'];
+      quantite: number;
+      motif: string;
+    }
   ) =>
     dodomeFetch<StockMovement>(`/businesses/${businessId}/stock/movements/`, {
       method: 'POST',
       body: data as unknown as Record<string, unknown>,
-      businessId,
+      businessId
     }),
   history: (businessId: string, itemId: string) =>
     dodomeFetch<Paginated<StockMovement>>(
       `/businesses/${businessId}/items/${itemId}/stock/history/`,
       { businessId }
-    ),
+    )
 };
 
 // ─── Réservations ─────────────────────────────────────────────────────────
@@ -252,7 +305,10 @@ export type Reservation = {
 };
 
 export const reservationApi = {
-  list: (businessId: string, opts?: { page?: number; limit?: number; statut?: string }) => {
+  list: (
+    businessId: string,
+    opts?: { page?: number; limit?: number; statut?: string }
+  ) => {
     const p = new URLSearchParams();
     if (opts?.page) p.set('page', String(opts.page));
     if (opts?.limit) p.set('page_size', String(opts.limit));
@@ -265,21 +321,32 @@ export const reservationApi = {
   },
   create: (
     businessId: string,
-    data: { item_id: string; date_debut: string; date_fin: string; quantite?: number; motif?: string }
+    data: {
+      item_id: string;
+      date_debut: string;
+      date_fin: string;
+      quantite?: number;
+      motif?: string;
+    }
   ) =>
     dodomeFetch<Reservation>(`/businesses/${businessId}/reservations/`, {
       method: 'POST',
       body: data as unknown as Record<string, unknown>,
-      businessId,
+      businessId
     }),
   bulk: (
     businessId: string,
-    data: { items: { item_id: string; quantite: number }[]; date_debut: string; date_fin: string; motif?: string }
+    data: {
+      items: { item_id: string; quantite: number }[];
+      date_debut: string;
+      date_fin: string;
+      motif?: string;
+    }
   ) =>
     dodomeFetch<Reservation[]>(`/businesses/${businessId}/reservations/bulk/`, {
       method: 'POST',
       body: data as unknown as Record<string, unknown>,
-      businessId,
+      businessId
     }),
   action: (
     businessId: string,
@@ -291,13 +358,13 @@ export const reservationApi = {
       valider: 'valider',
       annuler: 'annuler',
       demarrer: 'demarrer',
-      terminer: 'terminer',
+      terminer: 'terminer'
     };
     return dodomeFetch<Reservation>(
       `/businesses/${businessId}/reservations/${reservationId}/${map[action]}/`,
       { method: 'POST', body, businessId }
     );
-  },
+  }
 };
 
 // ─── Booking Requests (demandes publiques) ────────────────────────────────
@@ -315,7 +382,10 @@ export type BookingRequest = {
 };
 
 export const bookingRequestApi = {
-  list: (businessId: string, opts?: { page?: number; limit?: number; statut?: string }) => {
+  list: (
+    businessId: string,
+    opts?: { page?: number; limit?: number; statut?: string }
+  ) => {
     const p = new URLSearchParams();
     if (opts?.page) p.set('page', String(opts.page));
     if (opts?.limit) p.set('page_size', String(opts.limit));
@@ -335,7 +405,7 @@ export const bookingRequestApi = {
     dodomeFetch<{ success: boolean; message: string }>(
       `/businesses/${businessId}/booking-requests/${requestId}/action/`,
       { method: 'POST', body: { action, ...data }, businessId }
-    ),
+    )
 };
 
 // ─── Membres & RBAC ───────────────────────────────────────────────────────
@@ -357,16 +427,21 @@ export type Role = {
 export const membersApi = {
   list: (businessId: string) =>
     dodomeFetch<Paginated<Member>>(`/businesses/${businessId}/members/`, {
-      businessId,
+      businessId
     }).then((d) => d.results),
   invite: (
     businessId: string,
-    data: { email: string; role_id?: string; first_name?: string; last_name?: string }
+    data: {
+      email: string;
+      role_id?: string;
+      first_name?: string;
+      last_name?: string;
+    }
   ) =>
     dodomeFetch<Member>(`/businesses/${businessId}/members/`, {
       method: 'POST',
       body: data as unknown as Record<string, unknown>,
-      businessId,
+      businessId
     }),
   update: (
     businessId: string,
@@ -376,17 +451,17 @@ export const membersApi = {
     dodomeFetch<Member>(`/businesses/${businessId}/members/${memberId}/`, {
       method: 'PATCH',
       body: data as unknown as Record<string, unknown>,
-      businessId,
+      businessId
     }),
   remove: (businessId: string, memberId: string) =>
     dodomeFetch<void>(`/businesses/${businessId}/members/${memberId}/`, {
       method: 'DELETE',
-      businessId,
+      businessId
     }),
   roles: (businessId: string) =>
     dodomeFetch<Paginated<Role>>(`/businesses/${businessId}/roles/`, {
-      businessId,
-    }).then((d) => d.results),
+      businessId
+    }).then((d) => d.results)
 };
 
 // ─── Entretien (procédures & tâches) ──────────────────────────────────────
@@ -395,67 +470,125 @@ export type Procedure = {
   nom: string;
   description: string;
   est_actif: boolean;
-  steps: { id: string; nom: string; ordre: number; obligatoire: boolean; type: string }[];
+  steps: {
+    id: string;
+    nom: string;
+    ordre: number;
+    obligatoire: boolean;
+    type: string;
+  }[];
 };
 
 export const maintenanceApi = {
   procedures: {
     list: (businessId: string) =>
-      dodomeFetch<Paginated<Procedure>>(`/businesses/${businessId}/procedures/`, { businessId }).then((d) => d.results),
-    create: (businessId: string, data: { nom: string; description?: string; steps_input?: any[] }) =>
-      dodomeFetch<Procedure>(`/businesses/${businessId}/procedures/`, { method: 'POST', body: data as any, businessId }),
+      dodomeFetch<Paginated<Procedure>>(
+        `/businesses/${businessId}/procedures/`,
+        { businessId }
+      ).then((d) => d.results),
+    create: (
+      businessId: string,
+      data: { nom: string; description?: string; steps_input?: any[] }
+    ) =>
+      dodomeFetch<Procedure>(`/businesses/${businessId}/procedures/`, {
+        method: 'POST',
+        body: data as any,
+        businessId
+      })
   },
   tasks: {
-    list: (businessId: string, opts?: { page?: number; limit?: number; statut?: string }) => {
+    list: (
+      businessId: string,
+      opts?: { page?: number; limit?: number; statut?: string }
+    ) => {
       const p = new URLSearchParams();
       if (opts?.page) p.set('page', String(opts.page));
       if (opts?.limit) p.set('page_size', String(opts.limit));
       if (opts?.statut) p.set('statut', opts.statut);
       const qs = p.toString() ? `?${p.toString()}` : '';
-      return dodomeFetch<Paginated<any>>(`/businesses/${businessId}/maintenance/tasks/${qs}`, { businessId });
+      return dodomeFetch<Paginated<any>>(
+        `/businesses/${businessId}/maintenance/tasks/${qs}`,
+        { businessId }
+      );
     },
-    create: (businessId: string, data: { item_id: string; procedure_id?: string; motif?: string }) =>
-      dodomeFetch<any>(`/businesses/${businessId}/maintenance/tasks/`, { method: 'POST', body: data as any, businessId }),
-    cloture: (businessId: string, taskId: string, partielle?: boolean) =>
-      dodomeFetch<any>(`/businesses/${businessId}/maintenance/tasks/${taskId}/cloturer/`, {
+    create: (
+      businessId: string,
+      data: { item_id: string; procedure_id?: string; motif?: string }
+    ) =>
+      dodomeFetch<any>(`/businesses/${businessId}/maintenance/tasks/`, {
         method: 'POST',
-        body: partielle ? { partielle: true } : {},
-        businessId,
+        body: data as any,
+        businessId
       }),
-  },
+    cloture: (businessId: string, taskId: string, partielle?: boolean) =>
+      dodomeFetch<any>(
+        `/businesses/${businessId}/maintenance/tasks/${taskId}/cloturer/`,
+        {
+          method: 'POST',
+          body: partielle ? { partielle: true } : {},
+          businessId
+        }
+      )
+  }
 };
 
 // ─── Invoices & Inventaires ─────────────────────────────────────────────
 export const invoiceApi = {
   list: (businessId: string) =>
-    dodomeFetch<Paginated<any>>(`/businesses/${businessId}/invoices/`, { businessId }).then((d) => d.results),
-  create: (businessId: string, data: { reservation_id: string; type?: string; tva_taux?: number }) =>
-    dodomeFetch<any>(`/businesses/${businessId}/invoices/`, { method: 'POST', body: data as any, businessId }),
+    dodomeFetch<Paginated<any>>(`/businesses/${businessId}/invoices/`, {
+      businessId
+    }).then((d) => d.results),
+  create: (
+    businessId: string,
+    data: { reservation_id: string; type?: string; tva_taux?: number }
+  ) =>
+    dodomeFetch<any>(`/businesses/${businessId}/invoices/`, {
+      method: 'POST',
+      body: data as any,
+      businessId
+    }),
   markSent: (businessId: string, id: string) =>
-    dodomeFetch<any>(`/businesses/${businessId}/invoices/${id}/mark-sent/`, { method: 'POST', businessId }),
+    dodomeFetch<any>(`/businesses/${businessId}/invoices/${id}/mark-sent/`, {
+      method: 'POST',
+      businessId
+    }),
   markPaid: (businessId: string, id: string) =>
-    dodomeFetch<any>(`/businesses/${businessId}/invoices/${id}/mark-paid/`, { method: 'POST', businessId }),
+    dodomeFetch<any>(`/businesses/${businessId}/invoices/${id}/mark-paid/`, {
+      method: 'POST',
+      businessId
+    })
 };
 
 export const inventoryApi = {
   list: (businessId: string) =>
-    dodomeFetch<Paginated<any>>(`/businesses/${businessId}/inventories/`, { businessId }).then((d) => d.results),
+    dodomeFetch<Paginated<any>>(`/businesses/${businessId}/inventories/`, {
+      businessId
+    }).then((d) => d.results),
   create: (businessId: string, data: { libelle: string }) =>
-    dodomeFetch<any>(`/businesses/${businessId}/inventories/`, { method: 'POST', body: data as any, businessId }),
+    dodomeFetch<any>(`/businesses/${businessId}/inventories/`, {
+      method: 'POST',
+      body: data as any,
+      businessId
+    }),
   cloture: (businessId: string, id: string) =>
-    dodomeFetch<any>(`/businesses/${businessId}/inventories/${id}/cloturer/`, { method: 'POST', businessId }),
+    dodomeFetch<any>(`/businesses/${businessId}/inventories/${id}/cloturer/`, {
+      method: 'POST',
+      businessId
+    })
 };
 
 // ─── Analytics / Dashboard (admin) ──────────────────────────────────────
 export const analyticsApi = {
   dashboard: (businessId: string) =>
     dodomeFetch<unknown>(`/businesses/${businessId}/dashboard/`, {
-      businessId,
+      businessId
     }),
   analytics: (businessId: string) =>
-    dodomeFetch<unknown>(`/businesses/${businessId}/analytics/`, { businessId }),
+    dodomeFetch<unknown>(`/businesses/${businessId}/analytics/`, {
+      businessId
+    }),
   activities: (businessId: string) =>
     dodomeFetch<Paginated<unknown>>(`/businesses/${businessId}/activities/`, {
-      businessId,
-    }),
+      businessId
+    })
 };

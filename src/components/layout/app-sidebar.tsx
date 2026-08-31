@@ -45,28 +45,33 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 import { Icons } from '../icons';
-
-export const company = {
-  name: 'Acme Inc',
-  logo: GalleryVerticalEnd,
-  plan: 'Enterprise'
-};
+import { useBusiness } from '@/hooks/use-business';
 
 export default function AppSidebar() {
   const { data: session } = useSession();
   const pathname = usePathname();
   const { state, isMobile } = useSidebar();
+  const { active, role, businesses, setActiveId } = useBusiness();
+
+  const businessName = active?.nom || 'DODOME';
+  const roleName = role?.nom
+    ? `Rôle : ${role.nom}`
+    : active?.business_type
+      ? active.business_type.replace('_', ' ')
+      : 'Multi-tenant';
 
   return (
     <Sidebar collapsible='icon'>
       <SidebarHeader>
-        <div className='text-sidebar-accent-foreground flex gap-2 py-2'>
-          <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg'>
-            <company.logo className='size-4' />
+        <div className='text-sidebar-accent-foreground flex items-center gap-2 px-1 py-2'>
+          <div className='bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg text-sm font-bold'>
+            {businessName.slice(0, 2).toUpperCase()}
           </div>
           <div className='grid flex-1 text-left text-sm leading-tight'>
-            <span className='truncate font-semibold'>{company.name}</span>
-            <span className='truncate text-xs'>{company.plan}</span>
+            <span className='truncate font-semibold'>{businessName}</span>
+            <span className='text-muted-foreground truncate text-xs'>
+              {roleName}
+            </span>
           </div>
         </div>
       </SidebarHeader>

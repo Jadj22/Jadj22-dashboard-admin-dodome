@@ -1,8 +1,6 @@
 import { NextAuthConfig } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api';
-
 const authConfig = {
   providers: [
     GoogleProvider({

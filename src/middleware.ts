@@ -1,13 +1,33 @@
-// Protecting routes with next-auth
-// https://next-auth.js.org/configuration/nextjs#middleware
-// https://nextjs.org/docs/app/building-your-application/routing/middleware
+import NextAuth from 'next-auth';
+import authConfig from '@/lib/auth.config';
 
-import { auth } from '@/lib/auth';
+const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
-  if (!req.auth) {
-    return Response.redirect(new URL('/', req.url));
+  const isAuthenticated = !!req.auth;
+
+  console.log('🔐 PROXY:', {
+    pathname: req.nextUrl.pathname,
+    authenticated: isAuthenticated,
+    user: req.auth?.user
+      ? {
+          name: req.auth.user.name,
+          email: req.auth.user.email
+          // Ne JAMAIS logger accessToken, refreshToken ou image complète.
+        }
+      : null
+  });
+
+  // Si non authentifié sur /dashboard, rediriger vers la page de connexion.
+  if (!isAuthenticated) {
+    const signInUrl = new URL('/', req.nextUrl.origin);
+    return Response.redirect(signInUrl);
   }
+
+  // Pas de vérification de rôle ici :
+  // le rôle dépend du business courant et est résolu côté client
+  // via BusinessProvider → GET /api/businesses/current/context/.
+  // Les permissions métier sont validées côté backend.
 });
 
 export const config = {

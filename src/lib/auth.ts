@@ -7,46 +7,58 @@ export const { auth, handlers, signOut, signIn } = NextAuth({
   ...authConfig,
 
   callbacks: {
-    async jwt({ token, user, account }) {
-      // Première connexion classique
-      if (user?.accessToken) {
-        token.accessToken = user.accessToken;
-      }
+    async signIn({ account }) {
+      // Seul Google est géré ici. Les credentials passent par le backend directement.
+      if (account?.provider !== 'google') return true;
+      // On laisse NextAuth créer la session — l'échange id_token → JWT Django
+      // se fait dans le callback jwt (ci-dessous).
+      return true;
+    },
 
-      if (user?.refreshToken) {
-        token.refreshToken = user.refreshToken;
-      }
-
-      // Connexion Google
-      if (account?.provider === 'google') {
-        if (account.access_token) {
-          token.accessToken = account.access_token;
-        }
-
-        if (account.refresh_token) {
-          token.refreshToken = account.refresh_token;
-        }
-      }
-
-      // Récupération des informations utilisateur depuis le backend
-      if (token.accessToken) {
+    async jwt({ token, account }) {
+      // ───────────────────────────────────────────────────────────────
+      // Première connexion Google : échanger l'ID token Google contre
+      // des JWT Django via POST /api/auth/google/.
+      // Cela garantit que le même User Django est réutilisé, qu'on
+      // vienne du mobile (Flutter) ou du Web.
+      // ───────────────────────────────────────────────────────────────
+      if (account?.provider === 'google' && account.id_token) {
         try {
-          const res = await fetch(`${API_BASE}/auth/me/`, {
-            headers: {
-              Authorization: `Bearer ${token.accessToken}`
-            }
+          const res = await fetch(`${API_BASE}/auth/google/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_token: account.id_token })
           });
 
           if (res.ok) {
             const data = await res.json();
-
-            token.role = data.role;
-            token.permissions = data.permissions;
+            // Stocker les JWT Django (pas les tokens Google !)
+            token.accessToken = data.access;
+            token.refreshToken = data.refresh;
+            token.backendUserId = String(data.user?.id ?? '');
+            console.log('🔐 AUTH: Google → Django JWT exchange OK', {
+              backendUserId: token.backendUserId,
+              accessTokenPresent: !!data.access
+              // Ne JAMAIS logger le token complet.
+            });
+          } else {
+            const text = await res.text().catch(() => '');
+            console.error(
+              '🔐 AUTH: Google → Django JWT exchange FAILED',
+              res.status,
+              text.slice(0, 200)
+            );
           }
         } catch (error) {
-          console.error('Erreur récupération utilisateur:', error);
+          console.error('🔐 AUTH: Google → Django JWT exchange ERROR', error);
         }
       }
+
+      // ───────────────────────────────────────────────────────────────
+      // PAS de rôle/permissions stockés dans le JWT.
+      // Le rôle dépend du business courant et est résolu côté client
+      // via GET /api/businesses/current/context/ + X-Business-ID.
+      // ───────────────────────────────────────────────────────────────
 
       return token;
     },
@@ -56,8 +68,7 @@ export const { auth, handlers, signOut, signIn } = NextAuth({
       session.refreshToken = token.refreshToken as string;
 
       if (session.user) {
-        session.user.role = token.role as string;
-        session.user.permissions = token.permissions as string[];
+        session.user.backendUserId = token.backendUserId as string;
       }
 
       return session;

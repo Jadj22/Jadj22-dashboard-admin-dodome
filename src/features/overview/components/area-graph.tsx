@@ -2,6 +2,9 @@
 
 import { TrendingUp } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
+import { useBusiness } from '@/hooks/use-business';
+import { stockApi, type StockMovement } from '@/lib/dodome-api';
+import { useEffect, useState, useMemo } from 'react';
 
 import {
   Card,
@@ -17,87 +20,127 @@ import {
   ChartTooltip,
   ChartTooltipContent
 } from '@/components/ui/chart';
-const chartData = [
-  { month: 'January', desktop: 186, mobile: 80 },
-  { month: 'February', desktop: 305, mobile: 200 },
-  { month: 'March', desktop: 237, mobile: 120 },
-  { month: 'April', desktop: 73, mobile: 190 },
-  { month: 'May', desktop: 209, mobile: 130 },
-  { month: 'June', desktop: 214, mobile: 140 }
-];
 
 const chartConfig = {
-  desktop: {
-    label: 'Desktop',
+  entrees: {
+    label: 'Entrées',
     color: 'var(--chart-1)'
   },
-  mobile: {
-    label: 'Mobile',
+  sorties: {
+    label: 'Sorties',
     color: 'var(--chart-2)'
   }
 } satisfies ChartConfig;
 
 export function AreaGraph() {
+  const { active } = useBusiness();
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!active?.id) return;
+    setLoading(true);
+    stockApi
+      .movements(active.id, { page: 1 })
+      .then((res) => setMovements(res.results || []))
+      .catch(() => setMovements([]))
+      .finally(() => setLoading(false));
+  }, [active?.id]);
+
+  const chartData = useMemo(() => {
+    if (!movements.length) {
+      return [
+        { date: 'J-5', entrees: 0, sorties: 0 },
+        { date: 'J-4', entrees: 0, sorties: 0 },
+        { date: 'J-3', entrees: 0, sorties: 0 },
+        { date: 'J-2', entrees: 0, sorties: 0 },
+        { date: 'J-1', entrees: 0, sorties: 0 },
+        { date: "Aujourd'hui", entrees: 0, sorties: 0 }
+      ];
+    }
+
+    // Group by day
+    const groups: Record<string, { entrees: number; sorties: number }> = {};
+    movements.forEach((m) => {
+      const d = new Date(m.date).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric'
+      });
+      if (!groups[d]) groups[d] = { entrees: 0, sorties: 0 };
+      if (m.type === 'ENTREE' || m.type === 'RETOUR') {
+        groups[d].entrees += m.quantite;
+      } else {
+        groups[d].sorties += m.quantite;
+      }
+    });
+
+    return Object.entries(groups).map(([date, val]) => ({
+      date,
+      entrees: val.entrees,
+      sorties: val.sorties
+    }));
+  }, [movements]);
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Area Chart - Stacked</CardTitle>
-        <CardDescription>
-          Showing total visitors for the last 6 months
-        </CardDescription>
+        <CardTitle>Flux de Stock</CardTitle>
+        <CardDescription>Entrées vs Sorties récentes</CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer
-          config={chartConfig}
-          className='aspect-auto h-[310px] w-full'
-        >
-          <AreaChart
-            accessibilityLayer
-            data={chartData}
-            margin={{
-              left: 12,
-              right: 12
-            }}
+        {loading ? (
+          <p className='text-muted-foreground py-10 text-center text-sm'>
+            Chargement mouvements...
+          </p>
+        ) : (
+          <ChartContainer
+            config={chartConfig}
+            className='aspect-auto h-[310px] w-full'
           >
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey='month'
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              tickFormatter={(value) => value.slice(0, 3)}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent indicator='dot' />}
-            />
-            <Area
-              dataKey='mobile'
-              type='natural'
-              fill='var(--color-mobile)'
-              fillOpacity={0.4}
-              stroke='var(--color-mobile)'
-              stackId='a'
-            />
-            <Area
-              dataKey='desktop'
-              type='natural'
-              fill='var(--color-desktop)'
-              fillOpacity={0.4}
-              stroke='var(--color-desktop)'
-              stackId='a'
-            />
-          </AreaChart>
-        </ChartContainer>
+            <AreaChart
+              accessibilityLayer
+              data={chartData}
+              margin={{
+                left: 12,
+                right: 12
+              }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey='date'
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+              />
+              <ChartTooltip
+                cursor={false}
+                content={<ChartTooltipContent indicator='dot' />}
+              />
+              <Area
+                dataKey='entrees'
+                type='natural'
+                fill='var(--chart-1)'
+                fillOpacity={0.4}
+                stroke='var(--chart-1)'
+                stackId='a'
+              />
+              <Area
+                dataKey='sorties'
+                type='natural'
+                fill='var(--chart-2)'
+                fillOpacity={0.4}
+                stroke='var(--chart-2)'
+                stackId='a'
+              />
+            </AreaChart>
+          </ChartContainer>
+        )}
       </CardContent>
       <CardFooter>
         <div className='flex w-full items-start gap-2 text-sm'>
           <div className='grid gap-2'>
-            <div className='flex items-center gap-2 leading-none font-medium'>
-              Trending up by 5.2% this month <TrendingUp className='h-4 w-4' />
-            </div>
             <div className='text-muted-foreground flex items-center gap-2 leading-none'>
-              January - June 2024
+              {movements.length} mouvement(s) de stock récents analysés
             </div>
           </div>
         </div>

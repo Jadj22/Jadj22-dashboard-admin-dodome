@@ -5,18 +5,15 @@ declare module 'next-auth' {
     accessToken?: string;
     refreshToken?: string;
     user: DefaultSession['user'] & {
-      role?: string;
-      permissions?: string[];
-      businessId?: string;
+      /** Django User.id (int as string). */
+      backendUserId?: string;
     };
   }
 
   interface User {
     accessToken?: string;
     refreshToken?: string;
-    role?: string;
-    permissions?: string[];
-    businessId?: string;
+    backendUserId?: string;
   }
 
   interface CredentialsInputs {

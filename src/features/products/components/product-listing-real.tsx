@@ -2,38 +2,29 @@
 
 import { useEffect, useState } from 'react';
 import { catalogApi, type Item } from '@/lib/dodome-api';
-import { searchParamsCache } from '@/lib/searchparams';
+import { useSearchParams } from 'next/navigation';
 import { DataTable as ProductTable } from '@/components/ui/table/data-table';
 import { columns as productColumns } from './product-tables/columns';
 import type { Product } from '@/constants/data';
-
-// Adaptateur Item DODOME -> Product du starter (pour réutiliser la table existante)
-function toProduct(item: Item): Product {
-  return {
-    id: Number(item.id.slice(0, 8).replace(/-/g, '')) || 0, // uuid -> number pour compat
-    name: item.nom,
-    description: item.description,
-    price: parseFloat(item.prix),
-    photo_url:
-      item.photos[0]?.image ??
-      `https://api.slingacademy.com/public/sample-products/1.png`,
-    category: item.category?.nom ?? 'Sans catégorie',
-    created_at: item.created_at,
-    updated_at: item.created_at
-  } as Product;
-}
+import { useBusiness } from '@/hooks/use-business';
 
 export default function ProductListingReal() {
-  const page = searchParamsCache.get('page');
-  const search = searchParamsCache.get('q');
-  const pageLimit = searchParamsCache.get('limit');
-  const categories = searchParamsCache.get('categories');
+  const searchParams = useSearchParams();
+  const page = Number(searchParams.get('page') ?? 1);
+  const search = searchParams.get('q');
+  const pageLimit = Number(searchParams.get('limit') ?? 10);
+  const categories = searchParams.get('categories');
 
-  const businessId =
-    process.env.NEXT_PUBLIC_DEFAULT_BUSINESS_ID ??
-    (typeof window !== 'undefined'
-      ? localStorage.getItem('dodome_business_id')
-      : null);
+  const {
+    businesses,
+    activeId,
+    setActiveId,
+    loading: businessLoading,
+    membership,
+    currentBusiness
+  } = useBusiness();
+
+  const businessId = process.env.NEXT_PUBLIC_DEFAULT_BUSINESS_ID ?? activeId;
 
   const [data, setData] = useState<{ products: Product[]; total: number }>({
     products: [],
@@ -45,7 +36,7 @@ export default function ProductListingReal() {
   useEffect(() => {
     if (!businessId) {
       setError(
-        'Aucun business sélectionné. Définissez NEXT_PUBLIC_DEFAULT_BUSINESS_ID ou stockez dodome_business_id dans localStorage.'
+        'Aucun business sélectionné. Veuillez en choisir un dans la liste ci-dessous.'
       );
       setLoading(false);
       return;
@@ -77,8 +68,25 @@ export default function ProductListingReal() {
   if (error)
     return (
       <div className='text-destructive p-8 text-sm'>
-        Erreur API: {error} — fallback mock désactivé. Vérifiez
-        NEXT_PUBLIC_API_URL et le token.
+        <p>{error}</p>
+        {businesses && businesses.length > 0 && (
+          <div className='mt-4'>
+            <p className='text-muted-foreground text-sm'>
+              Aucun business actif ? Sélectionnez-en un :{' '}
+              <select
+                onChange={(e) => setActiveId(e.target.value)}
+                className='input-primary mt-2 block w-full rounded border'
+              >
+                <option value=''>-- Sélectionner un business --</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id} selected={b.id === activeId}>
+                    {b.nom}
+                  </option>
+                ))}
+              </select>
+            </p>
+          </div>
+        )}
       </div>
     );
 
