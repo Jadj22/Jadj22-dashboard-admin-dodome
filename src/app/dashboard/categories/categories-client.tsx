@@ -2,7 +2,7 @@
 
 import { useBusiness } from '@/hooks/use-business';
 import { catalogApi, type Category } from '@/lib/dodome-api';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,16 +31,20 @@ import {
   Layers,
   RefreshCw,
   Eye,
-  ExternalLink,
-  Package
+  Package,
+  Image as ImageIcon,
+  Upload,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import Image from 'next/image';
 
 export default function CategoriesClient() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     active,
     businesses,
@@ -55,6 +59,8 @@ export default function CategoriesClient() {
     null
   );
   const [submitting, setSubmitting] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [form, setForm] = useState({ nom: '', description: '', parent_id: '' });
 
   const load = () => {
@@ -74,6 +80,24 @@ export default function CategoriesClient() {
     load();
   }, [active?.id]);
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("L'image ne doit pas dépasser 5 Mo.");
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const clearImage = () => {
+    setImageFile(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!active?.id) {
@@ -89,10 +113,12 @@ export default function CategoriesClient() {
       await catalogApi.categories.create(active.id, {
         nom: form.nom.trim(),
         description: form.description.trim() || undefined,
-        parent_id: form.parent_id || null
+        parent_id: form.parent_id || null,
+        image: imageFile
       });
       toast.success(`Catégorie "${form.nom}" créée avec succès !`);
       setForm({ nom: '', description: '', parent_id: '' });
+      clearImage();
       setIsCreateOpen(false);
       load();
     } catch (e: any) {
@@ -143,24 +169,74 @@ export default function CategoriesClient() {
         </div>
 
         {/* Modal de création de catégorie */}
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <Dialog
+          open={isCreateOpen}
+          onOpenChange={(open) => {
+            setIsCreateOpen(open);
+            if (!open) clearImage();
+          }}
+        >
           <DialogTrigger asChild>
             <Button className='w-full gap-2 sm:w-auto'>
               <Plus className='h-4 w-4' />
               Nouvelle Catégorie
             </Button>
           </DialogTrigger>
-          <DialogContent className='sm:max-w-[480px]'>
+          <DialogContent className='max-h-[90vh] overflow-y-auto sm:max-w-[500px]'>
             <form onSubmit={submit}>
               <DialogHeader>
                 <DialogTitle>Créer une catégorie</DialogTitle>
                 <DialogDescription>
-                  Ajoutez une nouvelle catégorie pour organiser les articles de
-                  votre catalogue.
+                  Ajoutez une nouvelle catégorie avec un visuel et une
+                  description pour organiser vos articles.
                 </DialogDescription>
               </DialogHeader>
 
               <div className='space-y-4 py-4'>
+                {/* Champ Image / Visuel */}
+                <div className='space-y-1.5'>
+                  <Label>Image / Icône de la catégorie (optionnelle)</Label>
+                  <input
+                    ref={fileInputRef}
+                    type='file'
+                    accept='image/*'
+                    onChange={handleImageChange}
+                    className='hidden'
+                  />
+                  {imagePreview ? (
+                    <div className='bg-muted/40 relative flex h-32 w-full items-center justify-center overflow-hidden rounded-lg border'>
+                      <Image
+                        src={imagePreview}
+                        alt='Aperçu'
+                        fill
+                        className='object-contain'
+                      />
+                      <Button
+                        type='button'
+                        size='icon'
+                        variant='destructive'
+                        className='absolute top-2 right-2 h-7 w-7 rounded-full shadow-md'
+                        onClick={clearImage}
+                      >
+                        <X className='h-4 w-4' />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className='hover:border-primary/60 hover:bg-muted/30 flex h-28 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-4 text-center transition-colors'
+                    >
+                      <Upload className='text-muted-foreground mb-1.5 h-6 w-6' />
+                      <span className='text-foreground text-xs font-medium'>
+                        Cliquez pour ajouter une image
+                      </span>
+                      <span className='text-muted-foreground mt-0.5 text-[11px]'>
+                        PNG, JPG, WebP jusqu'à 5 Mo
+                      </span>
+                    </div>
+                  )}
+                </div>
+
                 <div className='space-y-1.5'>
                   <Label htmlFor='cat-name'>Nom de la catégorie *</Label>
                   <Input
@@ -218,7 +294,10 @@ export default function CategoriesClient() {
                 <Button
                   type='button'
                   variant='outline'
-                  onClick={() => setIsCreateOpen(false)}
+                  onClick={() => {
+                    clearImage();
+                    setIsCreateOpen(false);
+                  }}
                   disabled={submitting}
                 >
                   Annuler
@@ -265,6 +344,21 @@ export default function CategoriesClient() {
               </DialogHeader>
 
               <div className='space-y-4 py-2'>
+                {/* Visuel catégorie si existant */}
+                {selectedCategory.image_url || selectedCategory.image ? (
+                  <div className='bg-muted/30 relative h-40 w-full overflow-hidden rounded-lg border'>
+                    <Image
+                      src={
+                        selectedCategory.image_url ||
+                        (selectedCategory.image as string)
+                      }
+                      alt={selectedCategory.nom}
+                      fill
+                      className='object-cover'
+                    />
+                  </div>
+                ) : null}
+
                 {selectedCategory.description ? (
                   <div className='bg-muted/40 rounded-lg p-3 text-sm'>
                     <p className='text-muted-foreground mb-1 text-xs font-medium tracking-wider uppercase'>
@@ -362,48 +456,68 @@ export default function CategoriesClient() {
           )}
         </div>
       ) : (
-        <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'>
+        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
           {filtered.map((cat) => {
             const parent = rows.find((p) => p.id === cat.parent_id);
+            const categoryImage = cat.image_url || cat.image;
+
             return (
               <div
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat)}
-                className='bg-card hover:border-primary/50 flex cursor-pointer flex-col justify-between rounded-lg border p-4 shadow-xs transition-all hover:shadow-sm'
+                className='bg-card hover:border-primary/50 flex cursor-pointer flex-col justify-between overflow-hidden rounded-lg border p-4 shadow-xs transition-all hover:shadow-sm'
               >
                 <div>
-                  <div className='flex items-start justify-between gap-2'>
-                    <h4 className='hover:text-primary text-base leading-tight font-semibold transition-colors'>
-                      {cat.nom}
-                    </h4>
-                    <span className='bg-primary/10 text-primary inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium'>
-                      {cat.item_count || 0} article
-                      {cat.item_count > 1 ? 's' : ''}
-                    </span>
+                  <div className='flex items-start gap-3'>
+                    {/* Vignette Image de catégorie */}
+                    <div className='bg-muted/40 relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border'>
+                      {categoryImage ? (
+                        <Image
+                          src={categoryImage}
+                          alt={cat.nom}
+                          fill
+                          className='object-cover'
+                          sizes='48px'
+                        />
+                      ) : (
+                        <ImageIcon className='text-muted-foreground/60 h-5 w-5' />
+                      )}
+                    </div>
+
+                    <div className='min-w-0 flex-1'>
+                      <div className='flex items-start justify-between gap-1'>
+                        <h4 className='hover:text-primary truncate text-base font-semibold transition-colors'>
+                          {cat.nom}
+                        </h4>
+                        <span className='bg-primary/10 text-primary inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium'>
+                          {cat.item_count || 0}
+                        </span>
+                      </div>
+                      {cat.description ? (
+                        <p className='text-muted-foreground mt-1 line-clamp-2 text-xs'>
+                          {cat.description}
+                        </p>
+                      ) : (
+                        <p className='text-muted-foreground/60 mt-1 text-xs italic'>
+                          Aucune description
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {cat.description ? (
-                    <p className='text-muted-foreground mt-1.5 line-clamp-2 text-xs'>
-                      {cat.description}
-                    </p>
-                  ) : (
-                    <p className='text-muted-foreground/60 mt-1.5 text-xs italic'>
-                      Aucune description
-                    </p>
-                  )}
                 </div>
 
                 <div className='text-muted-foreground mt-3 flex items-center justify-between border-t pt-3 text-xs'>
-                  <span>
+                  <span className='truncate'>
                     {parent ? (
-                      <span className='text-primary inline-flex items-center gap-1'>
-                        <FolderTree className='h-3 w-3' />
+                      <span className='text-primary inline-flex items-center gap-1 truncate'>
+                        <FolderTree className='h-3 w-3 shrink-0' />
                         {parent.nom}
                       </span>
                     ) : (
                       'Catégorie principale'
                     )}
                   </span>
-                  <div className='flex items-center gap-1'>
+                  <div className='flex shrink-0 items-center gap-1'>
                     <Button
                       size='icon'
                       variant='ghost'

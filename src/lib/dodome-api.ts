@@ -142,8 +142,10 @@ async function dodomeFetch<T>(path: string, opts: FetchOpts = {}): Promise<T> {
   }
 
   const executeFetch = async (): Promise<T> => {
+    const isFormData =
+      typeof FormData !== 'undefined' && opts.body instanceof FormData;
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...opts.headers
     };
     if (opts.auth !== false) {
@@ -157,7 +159,11 @@ async function dodomeFetch<T>(path: string, opts: FetchOpts = {}): Promise<T> {
       res = await fetch(url, {
         method: opts.method ?? 'GET',
         headers,
-        body: opts.body ? JSON.stringify(opts.body) : undefined
+        body: isFormData
+          ? (opts.body as FormData)
+          : opts.body
+            ? JSON.stringify(opts.body)
+            : undefined
       });
     } catch (err: any) {
       console.warn(
@@ -317,13 +323,38 @@ export const catalogApi = {
     {
       create: (
         businessId: string,
-        data: { nom: string; description?: string; parent_id?: string | null }
-      ) =>
-        dodomeFetch<Category>(`/businesses/${businessId}/categories/`, {
+        data: {
+          nom: string;
+          description?: string;
+          parent_id?: string | null;
+          image?: File | null;
+        }
+      ) => {
+        if (data.image) {
+          const fd = new FormData();
+          fd.append('nom', data.nom);
+          if (data.description) fd.append('description', data.description);
+          if (data.parent_id) fd.append('parent_id', data.parent_id);
+          fd.append('image', data.image);
+          return dodomeFetch<Category>(
+            `/businesses/${businessId}/categories/`,
+            {
+              method: 'POST',
+              body: fd,
+              businessId
+            }
+          );
+        }
+        return dodomeFetch<Category>(`/businesses/${businessId}/categories/`, {
           method: 'POST',
-          body: data as unknown as Record<string, unknown>,
+          body: {
+            nom: data.nom,
+            description: data.description,
+            parent_id: data.parent_id
+          } as unknown as Record<string, unknown>,
           businessId
-        }),
+        });
+      },
       remove: (businessId: string, categoryId: string) =>
         dodomeFetch<void>(
           `/businesses/${businessId}/categories/${categoryId}/`,
