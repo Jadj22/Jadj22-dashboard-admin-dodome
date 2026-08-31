@@ -29,7 +29,63 @@ type FetchOpts = {
   headers?: Record<string, string>;
   businessId?: string;
   auth?: boolean; // false pour /auth/*
+  noCache?: boolean;
+  cacheTtl?: number; // millisecondes (défaut: 60s)
 };
+
+// ─── Cache Intelligent en mémoire & Déduplication de requêtes ───────────────
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttl: number;
+}
+
+class ApiCacheManager {
+  private cache = new Map<string, CacheEntry<unknown>>();
+  private inFlight = new Map<string, Promise<unknown>>();
+
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > entry.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  set<T>(key: string, data: T, ttl: number = 60_000): void {
+    this.cache.set(key, { data, timestamp: Date.now(), ttl });
+  }
+
+  getInFlight<T>(key: string): Promise<T> | null {
+    return (this.inFlight.get(key) as Promise<T>) || null;
+  }
+
+  setInFlight<T>(key: string, promise: Promise<T>): void {
+    this.inFlight.set(key, promise);
+  }
+
+  deleteInFlight(key: string): void {
+    this.inFlight.delete(key);
+  }
+
+  invalidate(pattern?: string | RegExp): void {
+    if (!pattern) {
+      this.cache.clear();
+      return;
+    }
+    const regex =
+      typeof pattern === 'string' ? new RegExp(pattern, 'i') : pattern;
+    for (const key of this.cache.keys()) {
+      if (regex.test(key)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+export const apiCache = new ApiCacheManager();
 
 // Helpers token (stockés en httpOnly cookie via next-auth, mais aussi localStorage côté client)
 function getAccessToken(): string | null {
@@ -58,67 +114,108 @@ async function refreshAccess(): Promise<string | null> {
 }
 
 async function dodomeFetch<T>(path: string, opts: FetchOpts = {}): Promise<T> {
+  const isGet = !opts.method || opts.method.toUpperCase() === 'GET';
   const base = getApiBase();
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   const url = path.startsWith('http') ? path : `${base}${cleanPath}`;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...opts.headers
-  };
-  if (opts.auth !== false) {
-    const token = getAccessToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-  }
-  if (opts.businessId) headers['X-Business-ID'] = opts.businessId;
+  const cacheKey = `${opts.businessId || 'global'}:${url}`;
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: opts.method ?? 'GET',
-      headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined
-    });
-  } catch (err: any) {
-    console.warn(
-      `[DODOME API] Connexion impossible vers ${url}:`,
-      err.message || err
+  // Invalidation automatique du cache lors d'une mutation (POST, PUT, PATCH, DELETE)
+  if (!isGet) {
+    const match = path.match(
+      /\/(items|categories|stock|reservations|invoices|inventories|maintenance|members|businesses|analytics)/i
     );
-    throw new Error(
-      `Impossible de joindre le serveur API (${url}). Vérifiez que le backend est démarré.`
-    );
-  }
-
-  // Refresh auto sur 401
-  if (res.status === 401 && opts.auth !== false) {
-    try {
-      const newToken = await refreshAccess();
-      if (newToken) {
-        headers['Authorization'] = `Bearer ${newToken}`;
-        res = await fetch(url, {
-          method: opts.method ?? 'GET',
-          headers,
-          body: opts.body ? JSON.stringify(opts.body) : undefined
-        });
-      }
-    } catch (refreshErr) {
-      console.warn(
-        '[DODOME API] Échec du rafraîchissement du token:',
-        refreshErr
-      );
+    if (match) {
+      apiCache.invalidate(match[1]);
+    } else {
+      apiCache.invalidate();
+    }
+  } else if (!opts.noCache) {
+    const cached = apiCache.get<T>(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+    const inFlight = apiCache.getInFlight<T>(cacheKey);
+    if (inFlight !== null) {
+      return inFlight;
     }
   }
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    let msg = text;
+  const executeFetch = async (): Promise<T> => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...opts.headers
+    };
+    if (opts.auth !== false) {
+      const token = getAccessToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
+    if (opts.businessId) headers['X-Business-ID'] = opts.businessId;
+
+    let res: Response;
     try {
-      const j = JSON.parse(text);
-      msg = j.detail ?? j.message ?? text;
-    } catch {}
-    throw new Error(`API ${res.status}: ${msg || res.statusText}`);
+      res = await fetch(url, {
+        method: opts.method ?? 'GET',
+        headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined
+      });
+    } catch (err: any) {
+      console.warn(
+        `[DODOME API] Connexion impossible vers ${url}:`,
+        err.message || err
+      );
+      throw new Error(
+        `Impossible de joindre le serveur API (${url}). Vérifiez que le backend est démarré.`
+      );
+    }
+
+    // Refresh auto sur 401
+    if (res.status === 401 && opts.auth !== false) {
+      try {
+        const newToken = await refreshAccess();
+        if (newToken) {
+          headers['Authorization'] = `Bearer ${newToken}`;
+          res = await fetch(url, {
+            method: opts.method ?? 'GET',
+            headers,
+            body: opts.body ? JSON.stringify(opts.body) : undefined
+          });
+        }
+      } catch (refreshErr) {
+        console.warn(
+          '[DODOME API] Échec du rafraîchissement du token:',
+          refreshErr
+        );
+      }
+    }
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      let msg = text;
+      try {
+        const j = JSON.parse(text);
+        msg = j.detail ?? j.message ?? text;
+      } catch {}
+      throw new Error(`API ${res.status}: ${msg || res.statusText}`);
+    }
+    if (res.status === 204) return undefined as T;
+    const result = (await res.json()) as T;
+
+    if (isGet && !opts.noCache) {
+      apiCache.set(cacheKey, result, opts.cacheTtl ?? 60_000);
+    }
+    return result;
+  };
+
+  if (isGet && !opts.noCache) {
+    const promise = executeFetch().finally(() => {
+      apiCache.deleteInFlight(cacheKey);
+    });
+    apiCache.setInFlight(cacheKey, promise);
+    return promise;
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+
+  return executeFetch();
 }
 
 // ─── Auth ───────────────────────────────────────────────────────────────
