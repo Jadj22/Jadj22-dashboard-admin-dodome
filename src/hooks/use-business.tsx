@@ -155,7 +155,9 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   };
 
   const active =
-    currentBusiness ?? businesses.find((b) => b.id === activeId) ?? null;
+    currentBusiness ??
+    businesses.find((b) => b.id === activeId) ??
+    (businesses.length > 0 ? businesses[0] : null);
 
   return (
     <BusinessContext.Provider

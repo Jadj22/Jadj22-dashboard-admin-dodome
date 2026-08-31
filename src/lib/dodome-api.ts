@@ -179,11 +179,34 @@ export type BusinessContext = {
 };
 
 export const businessApi = {
-  list: () =>
-    dodomeFetch<Paginated<Business>>('/businesses/').then((d) => d.results),
+  list: async (): Promise<Business[]> => {
+    try {
+      const res = await dodomeFetch<any>('/businesses/');
+      const list = Array.isArray(res) ? res : (res?.results ?? []);
+      if (list && list.length > 0) return list;
+    } catch (e) {
+      console.warn('[DODOME] /businesses/ échoué, essai via /auth/me/:', e);
+    }
+    try {
+      const me = await authApi.me();
+      if (me && me.businesses && me.businesses.length > 0) {
+        return me.businesses as Business[];
+      }
+    } catch (e) {
+      console.warn('[DODOME] /auth/me/ échoué:', e);
+    }
+    return [];
+  },
   get: (id: string) => dodomeFetch<Business>(`/businesses/${id}/`),
   current: (businessId: string) =>
-    dodomeFetch<BusinessContext>(`/businesses/current/context/`, { businessId })
+    dodomeFetch<BusinessContext>(`/businesses/current/context/`, {
+      businessId
+    }),
+  create: (data: { nom: string; business_type?: string }) =>
+    dodomeFetch<Business>('/businesses/', {
+      method: 'POST',
+      body: data as Record<string, unknown>
+    })
 };
 
 // ─── Catalogue ──────────────────────────────────────────────────────────
