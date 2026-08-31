@@ -2,16 +2,14 @@
 // https://next-auth.js.org/configuration/nextjs#middleware
 // https://nextjs.org/docs/app/building-your-application/routing/middleware
 
-import NextAuth from 'next-auth';
-import authConfig from '@/lib/auth.config';
-
-const { auth } = NextAuth(authConfig);
+import { auth } from '@/lib/auth';
 
 export default auth((req) => {
   if (!req.auth) {
-    const url = req.url.replace(req.nextUrl.pathname, '/');
-    return Response.redirect(url);
+    return Response.redirect(new URL('/', req.url));
   }
 });
 
-export const config = { matcher: ['/dashboard/:path*'] };
+export const config = {
+  matcher: ['/dashboard/:path*']
+};
