@@ -1,7 +1,16 @@
 import NextAuth from 'next-auth';
 import authConfig from './auth.config';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api';
+function getApiBase(): string {
+  const raw = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.API_URL ||
+    'http://localhost:8000/api'
+  )
+    .trim()
+    .replace(/\/+$/, '');
+  return raw.endsWith('/api') ? raw : `${raw}/api`;
+}
 
 export const { auth, handlers, signOut, signIn } = NextAuth({
   ...authConfig,
@@ -24,7 +33,8 @@ export const { auth, handlers, signOut, signIn } = NextAuth({
       // ───────────────────────────────────────────────────────────────
       if (account?.provider === 'google' && account.id_token) {
         try {
-          const res = await fetch(`${API_BASE}/auth/google/`, {
+          const apiBase = getApiBase();
+          const res = await fetch(`${apiBase}/auth/google/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id_token: account.id_token })
@@ -44,7 +54,7 @@ export const { auth, handlers, signOut, signIn } = NextAuth({
           } else {
             const text = await res.text().catch(() => '');
             console.error(
-              '🔐 AUTH: Google → Django JWT exchange FAILED',
+              `🔐 AUTH: Google → Django JWT exchange FAILED (${apiBase}/auth/google/)`,
               res.status,
               text.slice(0, 200)
             );

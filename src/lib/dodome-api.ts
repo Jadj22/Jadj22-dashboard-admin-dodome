@@ -4,7 +4,16 @@
  * Gère JWT (access/refresh), X-Business-ID (RM-01), pagination DRF, refresh auto 401
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api';
+function getApiBase(): string {
+  const raw = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.API_URL ||
+    'http://localhost:8000/api'
+  )
+    .trim()
+    .replace(/\/+$/, '');
+  return raw.endsWith('/api') ? raw : `${raw}/api`;
+}
 
 // Types paginés DRF
 export type Paginated<T> = {
@@ -35,7 +44,8 @@ function getRefreshToken(): string | null {
 async function refreshAccess(): Promise<string | null> {
   const refresh = getRefreshToken();
   if (!refresh) return null;
-  const res = await fetch(`${API_BASE}/auth/refresh/`, {
+  const base = getApiBase();
+  const res = await fetch(`${base}/auth/refresh/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh })
@@ -48,7 +58,9 @@ async function refreshAccess(): Promise<string | null> {
 }
 
 async function dodomeFetch<T>(path: string, opts: FetchOpts = {}): Promise<T> {
-  const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
+  const base = getApiBase();
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const url = path.startsWith('http') ? path : `${base}${cleanPath}`;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...opts.headers
