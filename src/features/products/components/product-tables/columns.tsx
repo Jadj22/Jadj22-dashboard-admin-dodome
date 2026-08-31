@@ -3,18 +3,46 @@
 import { Item } from '@/lib/dodome-api';
 import { ColumnDef } from '@tanstack/react-table';
 import { CellAction } from './cell-action';
+import { Package } from 'lucide-react';
+import Image from 'next/image';
 
 export const columns: ColumnDef<Item>[] = [
+  {
+    accessorKey: 'photo',
+    header: 'PHOTO',
+    cell: ({ row }) => {
+      const item = row.original;
+      const photoUrl = item.photos?.[0]?.image;
+
+      return (
+        <div className='bg-muted/40 relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border'>
+          {photoUrl ? (
+            <Image
+              src={photoUrl}
+              alt={item.nom}
+              fill
+              className='object-cover'
+              sizes='48px'
+            />
+          ) : (
+            <Package className='text-muted-foreground/60 h-5 w-5' />
+          )}
+        </div>
+      );
+    }
+  },
   {
     accessorKey: 'nom',
     header: 'ARTICLE',
     cell: ({ row }) => {
       const item = row.original;
       return (
-        <div>
-          <div className='font-medium'>{item.nom}</div>
+        <div className='max-w-[200px] sm:max-w-xs'>
+          <div className='text-foreground truncate text-sm leading-tight font-semibold'>
+            {item.nom}
+          </div>
           {item.reference && (
-            <div className='text-muted-foreground font-mono text-xs'>
+            <div className='text-muted-foreground mt-0.5 font-mono text-[11px]'>
               Réf: {item.reference}
             </div>
           )}
@@ -28,11 +56,13 @@ export const columns: ColumnDef<Item>[] = [
     cell: ({ row }) => {
       const cat = row.original.category;
       return cat?.nom ? (
-        <span className='bg-muted inline-flex items-center rounded px-2 py-0.5 text-xs font-medium'>
+        <span className='bg-primary/10 text-primary inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium'>
           {cat.nom}
         </span>
       ) : (
-        <span className='text-muted-foreground text-xs'>Non catégorisé</span>
+        <span className='text-muted-foreground/70 text-xs italic'>
+          Non catégorisé
+        </span>
       );
     }
   },
@@ -41,14 +71,16 @@ export const columns: ColumnDef<Item>[] = [
     header: 'PRIX UNITAIRE',
     cell: ({ row }) => {
       const p = parseFloat(row.original.prix) || 0;
-      return <span className='font-semibold'>{p.toLocaleString()} FCFA</span>;
+      return (
+        <span className='text-sm font-semibold'>{p.toLocaleString()} FCFA</span>
+      );
     }
   },
   {
     accessorKey: 'unite',
     header: 'UNITÉ',
     cell: ({ row }) => (
-      <span className='text-muted-foreground text-xs uppercase'>
+      <span className='text-muted-foreground text-xs font-medium uppercase'>
         {row.original.unite || 'UNITE'}
       </span>
     )
@@ -62,7 +94,7 @@ export const columns: ColumnDef<Item>[] = [
         <span
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
             statut === 'ACTIF'
-              ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
+              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
               : 'bg-muted text-muted-foreground'
           }`}
         >
@@ -75,7 +107,7 @@ export const columns: ColumnDef<Item>[] = [
     accessorKey: 'description',
     header: 'DESCRIPTION',
     cell: ({ row }) => (
-      <span className='text-muted-foreground line-clamp-1 max-w-xs text-xs'>
+      <span className='text-muted-foreground line-clamp-1 max-w-[200px] text-xs'>
         {row.original.description || '-'}
       </span>
     )

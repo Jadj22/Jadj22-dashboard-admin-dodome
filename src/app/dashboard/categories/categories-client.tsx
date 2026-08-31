@@ -29,11 +29,18 @@ import {
   FolderTree,
   Search,
   Layers,
-  RefreshCw
+  RefreshCw,
+  Eye,
+  ExternalLink,
+  Package
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
 export default function CategoriesClient() {
+  const router = useRouter();
   const {
     active,
     businesses,
@@ -44,6 +51,9 @@ export default function CategoriesClient() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
+    null
+  );
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ nom: '', description: '', parent_id: '' });
 
@@ -104,6 +114,7 @@ export default function CategoriesClient() {
     try {
       await catalogApi.categories.remove(active.id, cat.id);
       toast.success(`Catégorie "${cat.nom}" supprimée`);
+      setSelectedCategory(null);
       load();
     } catch (e: any) {
       toast.error(e.message || 'Impossible de supprimer cette catégorie');
@@ -119,7 +130,7 @@ export default function CategoriesClient() {
 
   return (
     <div className='space-y-6'>
-      {/* Barre d'action supérieure — Toujours visible */}
+      {/* Barre d'action supérieure */}
       <div className='flex flex-col items-center justify-between gap-4 sm:flex-row'>
         <div className='relative w-full sm:w-80'>
           <Search className='text-muted-foreground absolute top-2.5 left-3 h-4 w-4' />
@@ -221,6 +232,87 @@ export default function CategoriesClient() {
         </Dialog>
       </div>
 
+      {/* Modal de détail d'une catégorie */}
+      <Dialog
+        open={!!selectedCategory}
+        onOpenChange={(open) => !open && setSelectedCategory(null)}
+      >
+        <DialogContent className='sm:max-w-[480px]'>
+          {selectedCategory && (
+            <>
+              <DialogHeader>
+                <div className='flex items-center justify-between gap-2 pr-4'>
+                  <DialogTitle className='text-lg font-bold'>
+                    {selectedCategory.nom}
+                  </DialogTitle>
+                  <Badge variant='outline'>
+                    {selectedCategory.item_count || 0} article
+                    {(selectedCategory.item_count || 0) > 1 ? 's' : ''}
+                  </Badge>
+                </div>
+                <DialogDescription>
+                  {selectedCategory.parent_id ? (
+                    <span className='text-primary inline-flex items-center gap-1 text-xs'>
+                      <FolderTree className='h-3.5 w-3.5' />
+                      Sous-catégorie de :{' '}
+                      {rows.find((r) => r.id === selectedCategory.parent_id)
+                        ?.nom || 'Catégorie parente'}
+                    </span>
+                  ) : (
+                    'Catégorie principale'
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className='space-y-4 py-2'>
+                {selectedCategory.description ? (
+                  <div className='bg-muted/40 rounded-lg p-3 text-sm'>
+                    <p className='text-muted-foreground mb-1 text-xs font-medium tracking-wider uppercase'>
+                      Description
+                    </p>
+                    <p className='text-foreground'>
+                      {selectedCategory.description}
+                    </p>
+                  </div>
+                ) : (
+                  <p className='text-muted-foreground text-xs italic'>
+                    Aucune description pour cette catégorie.
+                  </p>
+                )}
+
+                <Separator />
+
+                <div className='flex items-center justify-between gap-2 pt-2'>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className='text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5'
+                    onClick={() => remove(selectedCategory)}
+                  >
+                    <Trash2 className='h-4 w-4' />
+                    Supprimer
+                  </Button>
+
+                  <Button
+                    size='sm'
+                    className='gap-1.5'
+                    onClick={() => {
+                      setSelectedCategory(null);
+                      router.push(
+                        `/dashboard/product?categories=${selectedCategory.id}`
+                      );
+                    }}
+                  >
+                    <Package className='h-4 w-4' />
+                    Voir les articles
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Contenu principal */}
       {!active && !businessLoading ? (
         <div className='bg-card/60 flex flex-col items-center justify-center rounded-lg border p-8 text-center'>
@@ -276,11 +368,12 @@ export default function CategoriesClient() {
             return (
               <div
                 key={cat.id}
-                className='bg-card hover:border-primary/40 flex flex-col justify-between rounded-lg border p-4 shadow-xs transition-colors'
+                onClick={() => setSelectedCategory(cat)}
+                className='bg-card hover:border-primary/50 flex cursor-pointer flex-col justify-between rounded-lg border p-4 shadow-xs transition-all hover:shadow-sm'
               >
                 <div>
                   <div className='flex items-start justify-between gap-2'>
-                    <h4 className='text-base leading-tight font-semibold'>
+                    <h4 className='hover:text-primary text-base leading-tight font-semibold transition-colors'>
                       {cat.nom}
                     </h4>
                     <span className='bg-primary/10 text-primary inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium'>
@@ -310,15 +403,32 @@ export default function CategoriesClient() {
                       'Catégorie principale'
                     )}
                   </span>
-                  <Button
-                    size='icon'
-                    variant='ghost'
-                    className='text-muted-foreground hover:text-destructive h-7 w-7'
-                    onClick={() => remove(cat)}
-                    title='Supprimer la catégorie'
-                  >
-                    <Trash2 className='h-3.5 w-3.5' />
-                  </Button>
+                  <div className='flex items-center gap-1'>
+                    <Button
+                      size='icon'
+                      variant='ghost'
+                      className='text-muted-foreground hover:text-primary h-7 w-7'
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCategory(cat);
+                      }}
+                      title='Voir les détails'
+                    >
+                      <Eye className='h-3.5 w-3.5' />
+                    </Button>
+                    <Button
+                      size='icon'
+                      variant='ghost'
+                      className='text-muted-foreground hover:text-destructive h-7 w-7'
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        remove(cat);
+                      }}
+                      title='Supprimer la catégorie'
+                    >
+                      <Trash2 className='h-3.5 w-3.5' />
+                    </Button>
+                  </div>
                 </div>
               </div>
             );
