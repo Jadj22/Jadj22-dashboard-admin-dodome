@@ -88,8 +88,10 @@ export default function ProductForm({
         description: values.description,
         statut: 'ACTIF'
       };
-      if (values.category) {
+      if (values.category && values.category !== 'none') {
         payload.category_id = values.category;
+      } else {
+        payload.category_id = null;
       }
 
       if (initialData?.id) {
@@ -158,6 +160,9 @@ export default function ProductForm({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
+                        <SelectItem value='none'>
+                          Aucune catégorie (Non catégorisé)
+                        </SelectItem>
                         {categories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>
                             {cat.nom}
