@@ -66,7 +66,7 @@ export default function UserAuthForm() {
                 <FormControl>
                   <Input
                     type='email'
-                    placeholder='vous@exemple.com'
+                    placeholder='mail@nomdomain.com'
                     disabled={loading}
                     {...field}
                   />
