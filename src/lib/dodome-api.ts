@@ -1,6 +1,6 @@
 /**
  * Client API réel DODOME — remplace mock-api.ts
- * Django REST @ https://dodome-backend.onrender.com/api
+ * Django REST @ https://application-gestion-backend.onrender.com/api
  * Gère JWT (access/refresh), X-Business-ID (RM-01), pagination DRF, refresh auto 401
  */
 
